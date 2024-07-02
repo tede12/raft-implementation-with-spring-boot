@@ -17,8 +17,16 @@ public class RaftController {
 
     @PostMapping("/request-vote")
     public Mono<Boolean> requestVote(@RequestBody Map<String, Object> payload) {
+        // Get the candidateId and candidateTerm from the payload
         String candidateId = (String) payload.get("candidateId");
-        int candidateTerm = (int) payload.get("candidateTerm");return raftService.requestVote(candidateId, candidateTerm);
+        Integer candidateTerm = (payload.get("candidateTerm") instanceof Integer) ? (Integer) payload.get("candidateTerm") : null;
+
+        // Check if the candidateId and candidateTerm are present in the payload
+        if (candidateId == null || candidateTerm == null) {
+            return Mono.error(new IllegalArgumentException("Invalid request payload: 'candidateId' or 'candidateTerm' is missing."));
+        }
+
+        return raftService.requestVote(candidateId, candidateTerm);
     }
 
     @PostMapping("/start-election")
