@@ -25,4 +25,14 @@ public class NodeStateEntity {
     @Column("voted_for")
     private String votedFor;
 
+    @Override
+    public String toString() {
+        return "NodeStateEntity{" +
+                "id=" + id +
+                ", nodeId='" + nodeId + '\'' +
+                ", state='" + state + '\'' +
+                ", currentTerm=" + currentTerm +
+                ", votedFor='" + votedFor + '\'' +
+                '}';
+    }
 }
