@@ -43,4 +43,10 @@ public class RaftController {
     public Mono<Void> initialize() {
         return raftService.initializeNode();
     }
+
+
+    @PostMapping("/heartbeat")
+    public Mono<Void> receiveHeartbeat() {
+        return raftService.receiveHeartbeat();
+    }
 }
