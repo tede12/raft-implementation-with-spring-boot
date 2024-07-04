@@ -1,0 +1,30 @@
+services:
+  node1:
+    build: .
+    container_name: node1
+    command: java -jar app.jar --server.port=8000 --node.id=node1 --cluster.nodes=localhost:8000,localhost:8001,localhost:8002
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    working_dir: /app
+
+  node2:
+    build: .
+    container_name: node2
+    command: java -jar app.jar --server.port=8001 --node.id=node2 --cluster.nodes=localhost:8000,localhost:8001,localhost:8002
+    ports:
+      - "8001:8001"
+    volumes:
+      - .:/app
+    working_dir: /app
+
+  node3:
+    build: .
+    container_name: node3
+    command: java -jar app.jar --server.port=8002 --node.id=node3 --cluster.nodes=localhost:8000,localhost:8001,localhost:8002
+    ports:
+      - "8002:8002"
+    volumes:
+      - .:/app
+    working_dir: /app
