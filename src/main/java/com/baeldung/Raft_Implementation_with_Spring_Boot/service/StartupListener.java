@@ -3,9 +3,10 @@ package com.baeldung.Raft_Implementation_with_Spring_Boot.service;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.ApplicationListener;
 import org.springframework.stereotype.Component;
-import reactor.core.publisher.Mono;
+import lombok.extern.slf4j.Slf4j;
 
 @Component
+@Slf4j
 public class StartupListener implements ApplicationListener<ApplicationReadyEvent> {
 
     private final RaftService raftService;
@@ -17,7 +18,7 @@ public class StartupListener implements ApplicationListener<ApplicationReadyEven
     @Override
     public void onApplicationEvent(ApplicationReadyEvent event) {
         raftService.initializeNode()
-                .doOnError(e -> System.err.println("Error during node initialization: " + e.getMessage()))
+                .doOnError(e -> log.error("Error initializing node: {}", e.getMessage()))
                 .subscribe();
     }
 }

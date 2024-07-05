@@ -1,18 +1,28 @@
 package com.baeldung.Raft_Implementation_with_Spring_Boot.controller;
 
+import com.baeldung.Raft_Implementation_with_Spring_Boot.dto.NodeStatusDTO;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import com.baeldung.Raft_Implementation_with_Spring_Boot.service.RaftService;
 
+import java.time.Duration;
 import java.util.Map;
 
 @RestController
+@Slf4j
 @RequestMapping("/raft")
 public class RaftController {
     private final RaftService raftService;
+    private final ObjectMapper objectMapper;
 
     public RaftController(RaftService raftService) {
         this.raftService = raftService;
+        this.objectMapper = new ObjectMapper();
     }
 
     @PostMapping("/request-vote")
@@ -35,9 +45,17 @@ public class RaftController {
     }
 
     @GetMapping("/status")
-    public Mono<String> getStatus() {
-        return raftService.getNodeStatus();
+    public Mono<NodeStatusDTO> getStatus() {
+        return raftService.getNodeStatusEntity()
+                .map(node -> new NodeStatusDTO(
+                        node.getNodeId(),
+                        node.getState(),
+                        node.getCurrentTerm(),
+                        node.getVotedFor(),
+                        raftService.getOwnNodeUrl()
+                ));
     }
+
 
     @PostMapping("/initialize")
     public Mono<Void> initialize() {
@@ -49,4 +67,21 @@ public class RaftController {
     public Mono<Void> receiveHeartbeat() {
         return raftService.receiveHeartbeat();
     }
+
+
+    @GetMapping(value = "/status-stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<String> streamStatus() {
+        return Flux.interval(Duration.ofSeconds(2))
+                .flatMap(tick -> raftService.getAllNodeStatuses())
+                .map(nodeStates -> {
+                    try {
+                        return objectMapper.writeValueAsString(nodeStates);
+                    } catch (JsonProcessingException e) {
+                        log.error("Error serializing node states: {}", e.getMessage());
+                        return "[]";
+                    }
+                });
+    }
+
+
 }

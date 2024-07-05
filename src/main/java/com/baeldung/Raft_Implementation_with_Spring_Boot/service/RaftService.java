@@ -1,6 +1,9 @@
 package com.baeldung.Raft_Implementation_with_Spring_Boot.service;
 
+import com.baeldung.Raft_Implementation_with_Spring_Boot.dto.NodeStatusDTO;
 import jakarta.annotation.PostConstruct;
+import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.Disposable;
@@ -15,11 +18,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import com.baeldung.Raft_Implementation_with_Spring_Boot.model.NodeStateEntity;
 import com.baeldung.Raft_Implementation_with_Spring_Boot.repository.NodeStateRepository;
 import com.baeldung.Raft_Implementation_with_Spring_Boot.repository.LogEntryRepository;
+import com.baeldung.Raft_Implementation_with_Spring_Boot.exception.NodeStateNotFoundException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.transaction.annotation.Transactional;
 
 
 @Service
+@Slf4j
 public class RaftService {
     private final NodeStateRepository nodeStateRepository;
     private final WebClient webClient;
@@ -27,6 +32,7 @@ public class RaftService {
     private final String nodeId;
     private final List<String> clusterNodes;
     private final AtomicBoolean electionInProgress = new AtomicBoolean(false);
+    @Getter
     private final String ownNodeUrl;
     private volatile long lastHeartbeat = System.currentTimeMillis();
     private Disposable heartbeatTask;
@@ -44,7 +50,7 @@ public class RaftService {
 
     @Transactional
     public Mono<Void> initializeNode() {
-        System.out.println("Initializing node " + nodeId);
+        log.info("Initializing node " + nodeId);
         return nodeStateRepository.findByNodeId(nodeId)
                 .switchIfEmpty(Mono.defer(() -> {
                     NodeStateEntity node = new NodeStateEntity();
@@ -52,7 +58,7 @@ public class RaftService {
                     node.setState("FOLLOWER");
                     node.setCurrentTerm(0);
                     return nodeStateRepository.save(node)
-                            .doOnSuccess(savedNode -> System.out.println("State of node " + nodeId + " initialized to FOLLOWER"));
+                            .doOnSuccess(savedNode -> log.info("State of node " + nodeId + " initialized to FOLLOWER"));
                 }))
                 .flatMap(node -> {
                     if (!node.getState().equals("LEADER")) {
@@ -63,7 +69,7 @@ public class RaftService {
     }
 
     private Mono<Boolean> checkClusterReadiness() {
-        System.out.println("Checking cluster readiness, node " + nodeId);
+        log.info("Checking cluster readiness, node " + nodeId);
         return Flux.interval(Duration.ofSeconds(5))
                 .flatMap(tick ->
                         isLeader()
@@ -97,7 +103,7 @@ public class RaftService {
 
     private Mono<Boolean> checkClusterSize() {
         // Check if the cluster is ready and check active nodes
-        System.out.println("Checking cluster size, node " + nodeId);
+        log.info("Checking cluster size, node {}", nodeId);
         return Flux.fromIterable(clusterNodes)
                 .flatMap(nodeUrl ->
                         webClient.get()
@@ -118,7 +124,7 @@ public class RaftService {
     @Transactional
     public Mono<Void> startElection() {
         // Set the election flag to true
-        System.out.println("Node " + nodeId + " has started an election");
+        log.info("Node " + nodeId + " has started an election");
         return nodeStateRepository.findByNodeId(nodeId)
                 .flatMap(node -> {
                     node.setState("CANDIDATE");
@@ -126,13 +132,13 @@ public class RaftService {
                     node.setVotedFor(nodeId);
 
                     return nodeStateRepository.save(node)
-                            .doOnSuccess(savedNode -> System.out.println("Node " + nodeId + " is CANDIDATE with term " + savedNode.getCurrentTerm()))
+                            .doOnSuccess(savedNode -> log.info("Node " + nodeId + " is CANDIDATE with term " + savedNode.getCurrentTerm()))
                             .flatMap(this::sendRequestVoteToOtherNodes);
                 });
     }
 
     private Mono<Void> sendRequestVoteToOtherNodes(NodeStateEntity node) {
-        System.out.println("Node " + nodeId + " has started an election with term " + node.getCurrentTerm());
+        log.info("Node " + nodeId + " has started an election with term " + node.getCurrentTerm());
         return Flux.fromIterable(clusterNodes)
                 .flatMap(otherNode -> {
                     // Stop sending vote requests to self
@@ -149,7 +155,7 @@ public class RaftService {
                             .retrieve()
                             .bodyToMono(Boolean.class)
                             .onErrorResume(e -> {
-                                System.err.println("Error sending vote request to " + otherNode + ": " + e.getMessage());
+                                log.error("Error sending vote request to " + otherNode + ": " + e.getMessage());
                                 return Mono.just(false);
                             });
                 })
@@ -157,7 +163,7 @@ public class RaftService {
                 .flatMap(votes -> {
                     // Include the vote of the current node
                     long positiveVotes = votes.stream().filter(v -> v).count() + 1;
-                    System.out.println("Node " + nodeId + " has received " + positiveVotes + " votes");
+                    log.info("Node " + nodeId + " has received " + positiveVotes + " votes");
                     if (positiveVotes > clusterNodes.size() / 2) {
                         return becomeLeader();
                     }
@@ -168,12 +174,12 @@ public class RaftService {
     }
 
     private Mono<Void> becomeLeader() {
-        System.out.println("Node " + nodeId + " is now the leader");
+        log.info("Node " + nodeId + " is now the leader");
         return nodeStateRepository.findByNodeId(nodeId)
                 .flatMap(node -> {
                     node.setState("LEADER");
                     return nodeStateRepository.save(node)
-                            .doOnSuccess(n -> System.out.println("Node " + nodeId + " is now the leader"));
+                            .doOnSuccess(n -> log.info("Node " + nodeId + " is now the leader"));
                 })
                 .doOnSuccess(v -> startHeartbeat())
                 .then();
@@ -197,13 +203,8 @@ public class RaftService {
                             .uri("http://" + otherNode + "/raft/heartbeat")
                             .retrieve()
                             .bodyToMono(Void.class)
-                            .doOnSuccess(v ->
-                                    {
-                                    }
-//                                    System.out.println("Heartbeat sent to " + otherNode)
-                            )
                             .onErrorResume(e -> {
-                                System.err.println("Error during heartbeat to " + otherNode + ": " + e.getMessage());
+                                log.error("Error during heartbeat to " + otherNode + ": " + e.getMessage());
                                 return Mono.empty();
                             });
                 })
@@ -212,7 +213,7 @@ public class RaftService {
 
     public Mono<Void> receiveHeartbeat() {
         lastHeartbeat = System.currentTimeMillis();
-//        System.out.println("Received heartbeat from " + nodeId);
+        log.debug("Received leader heartbeat");
         return Mono.empty();
     }
 
@@ -240,7 +241,7 @@ public class RaftService {
     }
 
     public Mono<Boolean> requestVote(String candidateId, int candidateTerm) {
-        System.out.println("Received vote request from " + candidateId + " with term " + candidateTerm);
+        log.debug("Received vote request from " + candidateId + " with term " + candidateTerm);
         return nodeStateRepository.findByNodeId(nodeId)
                 .flatMap(node -> {
                     if (candidateTerm > node.getCurrentTerm() ||
@@ -249,9 +250,9 @@ public class RaftService {
                         node.setCurrentTerm(candidateTerm);
                         node.setVotedFor(candidateId);
                         node.setState("FOLLOWER"); // change state to follower
-                        System.out.println("Vote in favor of " + candidateId + " for term " + candidateTerm);
+                        log.info("Vote in favor of " + candidateId + " for term " + candidateTerm);
                         return nodeStateRepository.save(node)
-                                .doOnSuccess(savedNode -> System.out.println("State of node " + nodeId + " updated to FOLLOWER"))
+                                .doOnSuccess(savedNode -> log.debug("State of node " + nodeId + " updated to FOLLOWER"))
                                 .thenReturn(true);
                     }
                     return Mono.just(false);
@@ -262,16 +263,61 @@ public class RaftService {
         return nodeStateRepository.findByNodeId(nodeId)
                 .map(node -> {
                     boolean leader = node.getState().equals("LEADER");
-                    System.out.println("isLeader() for " + nodeId + ": " + leader);
+                    log.debug("isLeader() for " + nodeId + ": " + leader);
                     return leader;
                 })
                 .defaultIfEmpty(false);
     }
 
     public Mono<String> getNodeStatus() {
-        System.out.println("Request for node status: " + nodeId);
+        log.debug("Request for node status: " + nodeId);
         return nodeStateRepository.findByNodeId(nodeId)
                 .map(NodeStateEntity::getState)
                 .defaultIfEmpty("UNKNOWN");
     }
+
+    public Mono<List<NodeStatusDTO>> getAllNodeStatuses() {
+        return Flux.fromIterable(clusterNodes)
+                .flatMap(nodeUrl -> {
+                    if (nodeUrl.equals(ownNodeUrl)) {
+                        // Obtain local db state
+                        return nodeStateRepository.findByNodeId(nodeId)
+                                .map(node -> new NodeStatusDTO(
+                                        node.getNodeId(),
+                                        node.getState(),
+                                        node.getCurrentTerm(),
+                                        node.getVotedFor(),
+                                        nodeUrl
+                                ))
+                                .onErrorResume(e -> {
+                                    log.error("Error while retrieving current state: {}", e.getMessage());
+                                    return Mono.just(new NodeStatusDTO(nodeId, "DOWN", 0, "None", nodeUrl));
+                                });
+                    } else {
+                        // Ask the state for other nodes
+                        return webClient.get()
+                                .uri("http://" + nodeUrl + "/raft/status")
+                                .retrieve()
+                                .bodyToMono(NodeStatusDTO.class)
+                                .map(dto -> {
+                                    dto.setNodeUrl(nodeUrl);
+                                    return dto;
+                                })
+                                .onErrorResume(e -> {
+                                    log.error("Error while fetching status from {}: {}", nodeUrl, e.getMessage());
+
+                                    return Mono.just(new NodeStatusDTO(nodeUrl, "DOWN", 0, "None", nodeUrl));
+                                });
+                    }
+                })
+                .collectList();
+    }
+
+    public Mono<NodeStateEntity> getNodeStatusEntity() {
+        log.debug("Received node state from {}", nodeId);
+        return nodeStateRepository.findByNodeId(nodeId)
+                .switchIfEmpty(Mono.error(new NodeStateNotFoundException("State not found")));
+    }
+
+
 }
