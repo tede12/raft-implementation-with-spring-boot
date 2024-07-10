@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Node Status Monitoring</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 80%;
+            margin: 20px auto;
+        }
+
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: center;
+        }
+
+        th {
+            background-color: #4CAF50;
+            color: white;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+
+        tr:hover {
+            background-color: #ddd;
+        }
+
+        .down {
+            color: red;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+<h1 style="text-align:center;">Raft Node Status</h1>
+<table>
+    <thead>
+    <tr>
+        <th>Node</th>
+        <th>Status</th>
+        <th>Current Term</th>
+        <th>Voted For</th>
+        <th>Node URL</th>
+    </tr>
+    </thead>
+    <tbody id="status-table-body">
+    </tbody>
+</table>
+
+<script>
+    const evtSource = new EventSource('/raft/status-stream');
+
+    evtSource.onmessage = function (event) {
+        const data = event.data;
+        // 'data' is a JSON string representing a list of NodeStatusDTO
+        try {
+            const status = JSON.parse(data);
+            updateTable(status);
+        } catch (e) {
+            console.error('Error parsing data:', e);
+        }
+    };
+
+    function updateTable(statusList) {
+        const tableBody = document.getElementById('status-table-body');
+        tableBody.innerHTML = ''; // Clear the table
+
+        statusList.forEach(nodeStatus => {
+            const row = document.createElement('tr');
+
+            const nodeCell = document.createElement('td');
+            nodeCell.textContent = nodeStatus.nodeId !== nodeStatus.nodeUrl ? nodeStatus.nodeId : nodeStatus.nodeUrl;
+            row.appendChild(nodeCell);
+
+            const stateCell = document.createElement('td');
+            stateCell.textContent = nodeStatus.state;
+            if (nodeStatus.state === "DOWN") {
+                stateCell.classList.add('down');
+            }
+            row.appendChild(stateCell);
+
+            const termCell = document.createElement('td');
+            termCell.textContent = nodeStatus.currentTerm;
+            row.appendChild(termCell);
+
+            const votedForCell = document.createElement('td');
+            votedForCell.textContent = nodeStatus.votedFor || "None";
+            row.appendChild(votedForCell);
+
+            const nodeUrlCell = document.createElement('td');
+            nodeUrlCell.textContent = nodeStatus.nodeUrl;
+            row.appendChild(nodeUrlCell);
+            tableBody.appendChild(row);
+        });
+    }
+</script>
+</body>
+</html>
