@@ -56,24 +56,36 @@
 </table>
 
 <script>
-    const evtSource = new EventSource('/raft/status-stream');
+    const currentNodeUrl = window.location.host; // Gets 'localhost:8000', 'localhost:8001', etc.
+    let isRedirecting = false; // Flag to avoid multiple redirects
+    const nodeUrlsSet = new Set(); // To keep track of node URLs
+    let lastStatusList = []; // Stores the last status list
 
-    evtSource.onmessage = function (event) {
-        const data = event.data;
-        // 'data' is a JSON string representing a list of NodeStatusDTO
-        try {
-            const status = JSON.parse(data);
-            updateTable(status);
-        } catch (e) {
-            console.error('Error parsing data:', e);
+    /**
+     * Sorts the node list by nodeId in alphabetical order.
+     * @param {Array} statusList - List of node statuses.
+     * @returns {Array} Sorted list.
+     */
+    function sortStatusList(statusList) {
+        return statusList.sort((a, b) => a.nodeId.localeCompare(b.nodeId));
         }
-    };
 
+    /**
+     * Updates the table with node statuses.
+     * @param {Array} statusList - List of node statuses.
+     */
     function updateTable(statusList) {
+        lastStatusList = statusList; // Update the last status list
+
+        // Sort the node list by nodeId to maintain stable order
+        const sortedList = sortStatusList(statusList);
+
         const tableBody = document.getElementById('status-table-body');
         tableBody.innerHTML = ''; // Clear the table
 
-        statusList.forEach(nodeStatus => {
+        let currentNodeStatus = null;
+
+        sortedList.forEach(nodeStatus => {
             const row = document.createElement('tr');
 
             const nodeCell = document.createElement('td');
@@ -98,9 +110,98 @@
             const nodeUrlCell = document.createElement('td');
             nodeUrlCell.textContent = nodeStatus.nodeUrl;
             row.appendChild(nodeUrlCell);
+
+            nodeUrlsSet.add(nodeStatus.nodeUrl);
+
+            if (nodeStatus.nodeUrl === currentNodeUrl) {
+                currentNodeStatus = nodeStatus;
+            }
+
             tableBody.appendChild(row);
         });
+
+        if (currentNodeStatus && currentNodeStatus.state === "DOWN") {
+            if (!isRedirecting) {
+                isRedirecting = true;
+                handleCurrentNodeDown();
+            }
+        }
     }
+
+    function handleCurrentNodeDown() {
+        const activeNodes = lastStatusList.filter(node => node.nodeUrl !== currentNodeUrl && node.state !== "DOWN");
+
+        if (activeNodes.length === 0) {
+            alert('All nodes are DOWN. Unable to redirect.');
+            return;
+        }
+
+        let targetNode = activeNodes.find(node => node.state === "LEADER");
+
+        if (!targetNode) {
+            targetNode = activeNodes[0];
+        }
+        if (targetNode) {
+            window.location.href = `http://${targetNode.nodeUrl}/monitor`;
+        } else {
+            alert('All nodes are DOWN. Unable to redirect.');
+        }
+    }
+
+    function redirectToActiveNode(nodes) {
+        let index = 0;
+
+        function tryRedirect() {
+            if (index >= nodes.length) {
+                alert('All nodes are DOWN. Unable to redirect.');
+                return;
+            }
+
+            const targetNode = nodes[index];
+            index++;
+
+            // Try to verify if the node is active
+            fetch(`http://${targetNode}/raft/status`)
+                .then(response => {
+                    if (response.ok) {
+                        // Node is active, perform redirect
+                        window.location.href = `http://${targetNode}/monitor`;
+                    } else {
+                        // Node not active, try the next one
+                        tryRedirect();
+                    }
+                })
+                .catch(() => {
+                    // Network error, try the next one
+                    tryRedirect();
+                });
+        }
+
+        tryRedirect();
+    }
+
+    // Initialize EventSource connection
+    const evtSource = new EventSource('/raft/status-stream');
+
+    // Handle messages received from EventSource
+    evtSource.onmessage = function (event) {
+        const data = event.data;
+        try {
+            const status = JSON.parse(data);
+            updateTable(status);
+        } catch (e) {
+            console.error('Error parsing data:', e);
+        }
+    };
+
+    // Handle errors with EventSource connection
+    evtSource.onerror = function () {
+        console.error('Error with EventSource connection. Attempting redirect...');
+        if (!isRedirecting) {
+            isRedirecting = true;
+            handleCurrentNodeDown();
+        }
+    };
 </script>
 </body>
 </html>
