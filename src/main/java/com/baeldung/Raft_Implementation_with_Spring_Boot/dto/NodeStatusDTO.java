@@ -12,7 +12,7 @@ public class NodeStatusDTO {
     private String votedFor;
     private String nodeUrl;
 
-    // Constructor with nodeUrl set to null
+    // Constructor for Nodes that are not available and do not have a nodeUrl
     public NodeStatusDTO(String nodeId, String state, int currentTerm, String votedFor) {
         this.nodeId = nodeId;
         this.state = state;
@@ -21,7 +21,7 @@ public class NodeStatusDTO {
         this.nodeUrl = null;
     }
 
-    // Constructor with all fields
+    // Constructor for Nodes that are available and have a nodeUrl
     public NodeStatusDTO(String nodeId, String state, int currentTerm, String votedFor, String nodeUrl) {
         this.nodeId = nodeId;
         this.state = state;

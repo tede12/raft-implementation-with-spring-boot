@@ -9,7 +9,6 @@ import org.springframework.data.relational.core.mapping.Table;
 @Getter
 @Table("log_entry")
 public class LogEntryEntity {
-    // Getters and Setters
     @Id
     private Long id;
     private int term;

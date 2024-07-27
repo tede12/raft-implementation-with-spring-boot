@@ -44,18 +44,6 @@ public class RaftController {
         return raftService.startElection();
     }
 
-    @GetMapping("/status")
-    public Mono<NodeStatusDTO> getStatus() {
-        return raftService.getNodeStatusEntity()
-                .map(node -> new NodeStatusDTO(
-                        node.getNodeId(),
-                        node.getState(),
-                        node.getCurrentTerm(),
-                        node.getVotedFor(),
-                        raftService.getOwnNodeUrl()
-                ));
-    }
-
 
     @PostMapping("/initialize")
     public Mono<Void> initialize() {
@@ -68,20 +56,22 @@ public class RaftController {
         return raftService.receiveHeartbeat();
     }
 
+    @GetMapping("/status")
+    public Mono<NodeStatusDTO> getStatus() {
+        return raftService.getNodeStatusEntity().map(node -> new NodeStatusDTO(node.getNodeId(), node.getState(), node.getCurrentTerm(), node.getVotedFor(), raftService.getOwnNodeUrl()));
+    }
 
     @GetMapping(value = "/status-stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<String> streamStatus() {
-        return Flux.interval(Duration.ofSeconds(2))
-                .flatMap(tick -> raftService.getAllNodeStatuses())
-                .map(nodeStates -> {
-                    try {
-                        return objectMapper.writeValueAsString(nodeStates);
-                    } catch (JsonProcessingException e) {
+        return Flux.interval(Duration.ofSeconds(2)).flatMap(tick -> raftService.getAllNodeStatuses()).map(nodeStates -> {
+            // Convert the list of NodeStatusDTO objects to a JSON string
+            try {
+                return objectMapper.writeValueAsString(nodeStates);
+            } catch (JsonProcessingException e) {
                         log.error("Error serializing node states: {}", e.getMessage());
-                        return "[]";
-                    }
-                });
+                return "[]";
+            }
+        });
     }
-
 
 }

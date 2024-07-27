@@ -57,8 +57,8 @@
 
 <script>
     const currentNodeUrl = window.location.host; // Gets 'localhost:8000', 'localhost:8001', etc.
-    let isRedirecting = false; // Flag to avoid multiple redirects
-    const nodeUrlsSet = new Set(); // To keep track of node URLs
+    let isRedirecting = false; // Flag to prevent multiple redirects
+    const nodeUrlsSet = new Set(); // To maintain the list of nodes
     let lastStatusList = []; // Stores the last status list
 
     /**
@@ -68,10 +68,10 @@
      */
     function sortStatusList(statusList) {
         return statusList.sort((a, b) => a.nodeId.localeCompare(b.nodeId));
-        }
+    }
 
     /**
-     * Updates the table with node statuses.
+     * Updates the table with the node statuses.
      * @param {Array} statusList - List of node statuses.
      */
     function updateTable(statusList) {
@@ -111,8 +111,10 @@
             nodeUrlCell.textContent = nodeStatus.nodeUrl;
             row.appendChild(nodeUrlCell);
 
+            // Add the node URL to the Set if not already present
             nodeUrlsSet.add(nodeStatus.nodeUrl);
 
+            // Check if this node is the current node
             if (nodeStatus.nodeUrl === currentNodeUrl) {
                 currentNodeStatus = nodeStatus;
             }
@@ -120,6 +122,7 @@
             tableBody.appendChild(row);
         });
 
+        // After updating the table, check if the current node is DOWN
         if (currentNodeStatus && currentNodeStatus.state === "DOWN") {
             if (!isRedirecting) {
                 isRedirecting = true;
@@ -128,7 +131,11 @@
         }
     }
 
+    /**
+     * Handles the failure of the current node and attempts to redirect to another active node.
+     */
     function handleCurrentNodeDown() {
+        // Filter active nodes excluding the current node
         const activeNodes = lastStatusList.filter(node => node.nodeUrl !== currentNodeUrl && node.state !== "DOWN");
 
         if (activeNodes.length === 0) {
@@ -136,18 +143,27 @@
             return;
         }
 
+        // Prefer a node with "LEADER" state
         let targetNode = activeNodes.find(node => node.state === "LEADER");
 
+        // If no leader is found, take the first active node
         if (!targetNode) {
             targetNode = activeNodes[0];
         }
         if (targetNode) {
+            // Perform the redirect
             window.location.href = `http://${targetNode.nodeUrl}/monitor`;
         } else {
+            // No active node found
             alert('All nodes are DOWN. Unable to redirect.');
         }
     }
 
+    /**
+     * Redirects to an active node by checking its availability.
+     * Its NECESSARY even if it looks to be not used.
+     * @param {Array} nodes - List of nodes to attempt the redirect.
+     */
     function redirectToActiveNode(nodes) {
         let index = 0;
 
@@ -160,14 +176,14 @@
             const targetNode = nodes[index];
             index++;
 
-            // Try to verify if the node is active
+            // Attempt to check if the node is active
             fetch(`http://${targetNode}/raft/status`)
                 .then(response => {
                     if (response.ok) {
-                        // Node is active, perform redirect
+                        // Node is active, perform the redirect
                         window.location.href = `http://${targetNode}/monitor`;
                     } else {
-                        // Node not active, try the next one
+                        // Node is not active, try the next one
                         tryRedirect();
                     }
                 })
@@ -180,10 +196,10 @@
         tryRedirect();
     }
 
-    // Initialize EventSource connection
+    // Initialize the EventSource connection
     const evtSource = new EventSource('/raft/status-stream');
 
-    // Handle messages received from EventSource
+    // Handles messages received from the EventSource
     evtSource.onmessage = function (event) {
         const data = event.data;
         try {
@@ -194,9 +210,9 @@
         }
     };
 
-    // Handle errors with EventSource connection
+    // Handles EventSource connection errors
     evtSource.onerror = function () {
-        console.error('Error with EventSource connection. Attempting redirect...');
+        console.error('Error in EventSource connection. Attempting redirect...');
         if (!isRedirecting) {
             isRedirecting = true;
             handleCurrentNodeDown();
