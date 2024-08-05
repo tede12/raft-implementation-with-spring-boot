@@ -19,7 +19,7 @@ public class StartupListener implements ApplicationListener<ApplicationReadyEven
     @Override
     public void onApplicationEvent(@NonNull ApplicationReadyEvent event) {
         raftService.initializeNode()
-                .doOnError(e -> log.error("Error initializing node: {}", e.getMessage()))
+                .doOnError(e -> log.error("Error during node initialization: {}", e.getMessage()))
                 .subscribe();
     }
 }
