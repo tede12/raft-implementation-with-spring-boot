@@ -27,11 +27,11 @@ public class RaftController {
 
     @PostMapping("/request-vote")
     public Mono<Boolean> requestVote(@RequestBody Map<String, Object> payload) {
-        // Get the candidateId and candidateTerm from the payload
+        // Recover the candidateId and candidateTerm from the payload
         String candidateId = (String) payload.get("candidateId");
         Integer candidateTerm = (payload.get("candidateTerm") instanceof Integer) ? (Integer) payload.get("candidateTerm") : null;
 
-        // Check if the candidateId and candidateTerm are present in the payload
+        // Verify that the candidateId and candidateTerm are not null
         if (candidateId == null || candidateTerm == null) {
             return Mono.error(new IllegalArgumentException("Invalid request payload: 'candidateId' or 'candidateTerm' is missing."));
         }
@@ -58,8 +58,16 @@ public class RaftController {
 
     @GetMapping("/status")
     public Mono<NodeStatusDTO> getStatus() {
-        return raftService.getNodeStatusEntity().map(node -> new NodeStatusDTO(node.getNodeId(), node.getState(), node.getCurrentTerm(), node.getVotedFor(), raftService.getOwnNodeUrl()));
+        return raftService.getNodeStatusEntity()
+                .map(node -> new NodeStatusDTO(
+                        node.getNodeId(),
+                        node.getState(),
+                        node.getCurrentTerm(),
+                        node.getVotedFor(),
+                        raftService.getOwnNodeUrl()
+                ));
     }
+
 
     @GetMapping(value = "/status-stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<String> streamStatus() {

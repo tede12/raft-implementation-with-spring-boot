@@ -1,6 +1,7 @@
 package com.baeldung.Raft_Implementation_with_Spring_Boot.service;
 
 import com.baeldung.Raft_Implementation_with_Spring_Boot.dto.NodeStatusDTO;
+import com.baeldung.Raft_Implementation_with_Spring_Boot.model.NodeState;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -52,12 +53,12 @@ public class RaftService {
         return nodeStateRepository.findByNodeId(nodeId).switchIfEmpty(Mono.defer(() -> {
                     NodeStateEntity node = new NodeStateEntity();
                     node.setNodeId(nodeId);
-                    node.setState("FOLLOWER");
+                    node.setState(NodeState.FOLLOWER);
                     node.setCurrentTerm(0);
                     return transactionalRaftService.saveNodeState(node);
                 }))
                 .flatMap(node -> {
-                    if (!node.getState().equals("LEADER")) {
+                    if (!NodeState.LEADER.equals(node.getState())) {
                         return checkClusterReadiness().then();
                     }
                     return Mono.empty();
@@ -73,14 +74,14 @@ public class RaftService {
                 }).onErrorResume(e -> {
                     log.error("Error during status request to {}: {}", nodeUrl, e.getMessage());
                     // If the node is DOWN, create a DTO with DOWN status
-                    return Mono.just(new NodeStatusDTO(nodeUrl, "DOWN", 0, "None", nodeUrl));
+                    return Mono.just(new NodeStatusDTO(nodeUrl, NodeState.DOWN, 0, "None", nodeUrl));
                 })).collectList().flatMap(responses -> {
                     // Check if there is already a leader
-                    boolean leaderExists = responses.stream().anyMatch(status -> "LEADER".equals(status.getState()));
+                    boolean leaderExists = responses.stream().anyMatch(status -> NodeState.LEADER.equals(status.getState()));
                     if (leaderExists) {
                         // If another leader exists, ensure this node is not a leader
                         return nodeStateRepository.findByNodeId(nodeId).flatMap(node -> {
-                            if ("LEADER".equals(node.getState())) {
+                            if (NodeState.LEADER.equals(node.getState())) {
                                 return transactionalRaftService.stepDown(node);
                             }
                             return Mono.just(true);
@@ -99,7 +100,7 @@ public class RaftService {
     public Mono<Void> startElection() {
         log.info("Node {} has started an election", nodeId);
         return nodeStateRepository.findByNodeId(nodeId).flatMap(node -> {
-            node.setState("CANDIDATE");
+            node.setState(NodeState.CANDIDATE);
             node.setCurrentTerm(node.getCurrentTerm() + 1);
             node.setVotedFor(nodeId);
             log.debug("Node {} increments term to {}", nodeId, node.getCurrentTerm());
@@ -178,13 +179,13 @@ public class RaftService {
             if (candidateTerm > node.getCurrentTerm()) {
                 node.setCurrentTerm(candidateTerm);
                 node.setVotedFor(candidateId);
-                node.setState("FOLLOWER");
+                node.setState(NodeState.FOLLOWER);
                 log.debug("Voted in favor of {} for higher term {}", candidateId, candidateTerm);
                 return transactionalRaftService.saveNodeState(node)
                         .thenReturn(true);
             } else if (candidateTerm == node.getCurrentTerm() && (node.getVotedFor() == null || node.getVotedFor().equals(candidateId))) {
                 node.setVotedFor(candidateId);
-                node.setState("FOLLOWER");
+                node.setState(NodeState.FOLLOWER);
                 log.debug("Voted in favor of {} for current term {}", candidateId, candidateTerm);
                 return transactionalRaftService.saveNodeState(node)
                         .thenReturn(true);
@@ -197,7 +198,7 @@ public class RaftService {
 
     private Mono<Boolean> isLeader() {
         return nodeStateRepository.findByNodeId(nodeId).map(node -> {
-            boolean leader = node.getState().equals("LEADER");
+            boolean leader = NodeState.LEADER.equals(node.getState());
             log.debug("isLeader() for {}: {}", nodeId, leader);
             return leader;
         }).defaultIfEmpty(false);
@@ -212,7 +213,7 @@ public class RaftService {
                         .onErrorResume(e -> {
                             log.error("Error retrieving local state: {}", e.getMessage());
                             // If it fails, consider the node as DOWN
-                            return Mono.just(new NodeStatusDTO(nodeId, "DOWN", 0, "None", nodeUrl));
+                            return Mono.just(new NodeStatusDTO(nodeId, NodeState.DOWN, 0, "None", nodeUrl));
                         });
             } else {
                 // Request status from other nodes
@@ -222,7 +223,7 @@ public class RaftService {
                 }).onErrorResume(e -> {
                     log.error("Error fetching status from {}: {}", nodeUrl, e.getMessage());
                     // Assign nodeUrl as identifier if nodeId cannot be obtained
-                    return Mono.just(new NodeStatusDTO(nodeUrl, "DOWN", 0, "None", nodeUrl));
+                    return Mono.just(new NodeStatusDTO(nodeUrl, NodeState.DOWN, 0, "None", nodeUrl));
                 });
             }
         }).collectList();

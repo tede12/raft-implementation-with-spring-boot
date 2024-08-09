@@ -1,5 +1,6 @@
 package com.baeldung.Raft_Implementation_with_Spring_Boot.service;
 
+import com.baeldung.Raft_Implementation_with_Spring_Boot.model.NodeState;
 import com.baeldung.Raft_Implementation_with_Spring_Boot.model.NodeStateEntity;
 import com.baeldung.Raft_Implementation_with_Spring_Boot.repository.NodeStateRepository;
 import lombok.extern.slf4j.Slf4j;
@@ -25,7 +26,7 @@ public class TransactionalRaftService {
 
     @Transactional
     public Mono<Void> stepDown(NodeStateEntity node) {
-        node.setState("FOLLOWER");
+        node.setState(NodeState.FOLLOWER);
         return nodeStateRepository.save(node)
                 .doOnSuccess(savedNode -> log.info("Node {} has stepped down to FOLLOWER", savedNode.getNodeId()))
                 .then();
@@ -33,7 +34,7 @@ public class TransactionalRaftService {
 
     @Transactional
     public Mono<NodeStateEntity> becomeLeader(NodeStateEntity node) {
-        node.setState("LEADER");
+        node.setState(NodeState.LEADER);
         return nodeStateRepository.save(node)
                 .doOnSuccess(savedNode -> log.info("Node {} has become LEADER with term {}", savedNode.getNodeId(), savedNode.getCurrentTerm()))
                 .thenReturn(node);
