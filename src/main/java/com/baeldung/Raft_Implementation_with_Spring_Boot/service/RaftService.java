@@ -7,8 +7,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientRequestException;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+
 
 import java.time.Duration;
 import java.util.List;
@@ -28,7 +30,9 @@ public class RaftService {
     private final TransactionalRaftService transactionalRaftService;
     private final WebClient webClient;
 
+    @Getter
     private final String nodeId;
+    @Getter
     private final List<String> clusterNodes;
     private final AtomicBoolean electionInProgress = new AtomicBoolean(false);
     @Getter
@@ -124,7 +128,12 @@ public class RaftService {
                     .bodyToMono(Boolean.class)
                     .doOnNext(voteGranted -> log.debug("Vote granted from {}: {}", otherNode, voteGranted))
                     .onErrorResume(e -> {
-                        log.error("Error during vote request to {}: {}", otherNode, e.getMessage());
+                        if (e instanceof WebClientRequestException && e.getMessage().contains("Connection refused")) {
+                            log.debug("Connection refused when attempting to contact {}. Assuming node is DOWN.", otherNode);
+                        } else {
+                            log.error("Error during vote request to {}: {}", otherNode, e.getMessage());
+                        }
+                        // Emit false to indicate no vote
                         return Mono.just(false);
                     });
         }).collectList().flatMap(votes -> {

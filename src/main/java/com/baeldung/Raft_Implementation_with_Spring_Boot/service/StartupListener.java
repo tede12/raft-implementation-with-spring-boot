@@ -18,6 +18,16 @@ public class StartupListener implements ApplicationListener<ApplicationReadyEven
 
     @Override
     public void onApplicationEvent(@NonNull ApplicationReadyEvent event) {
+        log.info("\n\n");
+        log.info("****************************************************************************************");
+        log.info("Node is starting up with the following configuration:");
+        log.info("\tNode ID: {}", raftService.getNodeId());
+        log.info("\tNode URL: {}", raftService.getOwnNodeUrl());
+        log.info("\tCluster Nodes: {}", String.join(", ", raftService.getClusterNodes()));
+        log.debug("\tDEBUGGING MONITOR: http://{}/monitor", raftService.getOwnNodeUrl());
+        log.info("****************************************************************************************\n\n");
+
+        // Initialize the node
         raftService.initializeNode()
                 .doOnError(e -> log.error("Error during node initialization: {}", e.getMessage()))
                 .subscribe();
