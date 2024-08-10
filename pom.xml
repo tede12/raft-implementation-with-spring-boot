@@ -104,4 +104,44 @@
         </plugins>
     </build>
 
+    <profiles>
+        <!-- Profile for Mac with Apple Silicon -->
+        <profile>
+            <id>mac-aarch_64</id>
+            <activation>
+                <os>
+                    <family>mac</family>
+                    <arch>aarch64</arch>
+                </os>
+            </activation>
+            <dependencies>
+                <dependency>
+                    <groupId>io.netty</groupId>
+                    <artifactId>netty-resolver-dns-native-macos</artifactId>
+                    <scope>runtime</scope>
+                    <classifier>osx-aarch_64</classifier>
+                </dependency>
+            </dependencies>
+        </profile>
+
+        <!-- Profile for Mac with Intel (x86-64) -->
+        <profile>
+            <id>mac-x86_64</id>
+            <activation>
+                <os>
+                    <family>mac</family>
+                    <arch>x86_64</arch>
+                </os>
+            </activation>
+            <dependencies>
+                <dependency>
+                    <groupId>io.netty</groupId>
+                    <artifactId>netty-resolver-dns-native-macos</artifactId>
+                    <scope>runtime</scope>
+                    <classifier>osx-x86_64</classifier>
+                </dependency>
+            </dependencies>
+        </profile>
+    </profiles>
+
 </project>
