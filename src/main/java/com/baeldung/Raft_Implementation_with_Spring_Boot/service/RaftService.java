@@ -1,10 +1,10 @@
 package com.baeldung.Raft_Implementation_with_Spring_Boot.service;
 
+import com.baeldung.Raft_Implementation_with_Spring_Boot.config.NodeConfig;
 import com.baeldung.Raft_Implementation_with_Spring_Boot.dto.NodeStatusDTO;
 import com.baeldung.Raft_Implementation_with_Spring_Boot.model.NodeState;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientRequestException;
@@ -41,15 +41,30 @@ public class RaftService {
 
     public RaftService(NodeStateRepository nodeStateRepository,
                        TransactionalRaftService transactionalRaftService,
-                       @Value("${node.id}") String nodeId,
-                       @Value("${cluster.nodes}") String clusterNodes,
-                       @Value("${server.port}") int serverPort) {
+                       NodeConfig nodeConfig,
+                       @org.springframework.beans.factory.annotation.Value("${server.port}") int serverPort) {
         this.nodeStateRepository = nodeStateRepository;
         this.transactionalRaftService = transactionalRaftService;
-        this.nodeId = nodeId;
-        this.clusterNodes = List.of(clusterNodes.split(","));
+        this.nodeId = nodeConfig.getId();
+        this.clusterNodes = nodeConfig.getClusterNodes();
         this.ownNodeUrl = "localhost:" + serverPort;
         this.webClient = WebClient.create();
+
+        // Add validation
+        if (this.clusterNodes == null || this.clusterNodes.isEmpty()) {
+            log.error("Cluster nodes configuration is missing or empty.");
+            throw new IllegalStateException("Cluster nodes must be configured.");
+        }
+        log.info("Node ID: {}", this.nodeId);
+        log.info("Cluster Nodes: {}", String.join(", ", this.clusterNodes));
+    }
+
+    private boolean isNodeUp(Throwable error, String nodeUrl) {
+        if (error instanceof WebClientRequestException && error.getMessage().contains("Connection refused")) {
+            log.debug("Connection refused when attempting to contact {}. Assuming node is DOWN.", nodeUrl);
+            return false;
+        }
+        return true;
     }
 
     public Mono<Void> initializeNode() {
@@ -69,14 +84,16 @@ public class RaftService {
                 });
     }
 
-    private Mono<Boolean> checkClusterReadiness() {
+    Mono<Boolean> checkClusterReadiness() {
         return Flux.interval(Duration.ofSeconds(5)).flatMap(tick -> isLeader().flatMap(isLeader -> {
             if (!isLeader) {
                 return Flux.fromIterable(clusterNodes).flatMap(nodeUrl -> webClient.get().uri("http://" + nodeUrl + "/raft/status").retrieve().bodyToMono(NodeStatusDTO.class).map(dto -> {
                     dto.setNodeUrl(nodeUrl);
                     return dto;
                 }).onErrorResume(e -> {
-                    log.error("Error during status request to {}: {}", nodeUrl, e.getMessage());
+                    if (isNodeUp(e, nodeUrl)) {
+                        log.error("Error during status request to {}: {}", nodeUrl, e.getMessage());
+                    }
                     // If the node is DOWN, create a DTO with DOWN status
                     return Mono.just(new NodeStatusDTO(nodeUrl, NodeState.DOWN, 0, "None", nodeUrl));
                 })).collectList().flatMap(responses -> {
@@ -128,9 +145,7 @@ public class RaftService {
                     .bodyToMono(Boolean.class)
                     .doOnNext(voteGranted -> log.debug("Vote granted from {}: {}", otherNode, voteGranted))
                     .onErrorResume(e -> {
-                        if (e instanceof WebClientRequestException && e.getMessage().contains("Connection refused")) {
-                            log.debug("Connection refused when attempting to contact {}. Assuming node is DOWN.", otherNode);
-                        } else {
+                        if (isNodeUp(e, otherNode)) {
                             log.error("Error during vote request to {}: {}", otherNode, e.getMessage());
                         }
                         // Emit false to indicate no vote
@@ -220,7 +235,9 @@ public class RaftService {
                 // Get status from local database
                 return nodeStateRepository.findByNodeId(nodeId).map(node -> new NodeStatusDTO(node.getNodeId(), node.getState(), node.getCurrentTerm(), node.getVotedFor(), nodeUrl))
                         .onErrorResume(e -> {
-                            log.error("Error retrieving local state: {}", e.getMessage());
+                            if (isNodeUp(e, nodeUrl)) {
+                                log.error("Error retrieving local state: {}", e.getMessage());
+                            }
                             // If it fails, consider the node as DOWN
                             return Mono.just(new NodeStatusDTO(nodeId, NodeState.DOWN, 0, "None", nodeUrl));
                         });
@@ -230,7 +247,9 @@ public class RaftService {
                     dto.setNodeUrl(nodeUrl); // Set nodeUrl in DTO
                     return dto;
                 }).onErrorResume(e -> {
-                    log.error("Error fetching status from {}: {}", nodeUrl, e.getMessage());
+                    if (isNodeUp(e, nodeUrl)) {
+                        log.error("Error fetching status from {}: {}", nodeUrl, e.getMessage());
+                    }
                     // Assign nodeUrl as identifier if nodeId cannot be obtained
                     return Mono.just(new NodeStatusDTO(nodeUrl, NodeState.DOWN, 0, "None", nodeUrl));
                 });
