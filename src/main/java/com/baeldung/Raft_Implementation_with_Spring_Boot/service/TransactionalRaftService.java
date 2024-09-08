@@ -1,8 +1,8 @@
 package com.baeldung.Raft_Implementation_with_Spring_Boot.service;
 
-import com.baeldung.Raft_Implementation_with_Spring_Boot.model.NodeState;
-import com.baeldung.Raft_Implementation_with_Spring_Boot.model.NodeStateEntity;
-import com.baeldung.Raft_Implementation_with_Spring_Boot.repository.NodeStateRepository;
+import com.baeldung.Raft_Implementation_with_Spring_Boot.persistence.model.NodeState;
+import com.baeldung.Raft_Implementation_with_Spring_Boot.persistence.model.NodeStateEntity;
+import com.baeldung.Raft_Implementation_with_Spring_Boot.persistence.repository.NodeStateRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

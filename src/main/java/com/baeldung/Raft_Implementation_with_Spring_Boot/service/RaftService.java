@@ -2,7 +2,7 @@ package com.baeldung.Raft_Implementation_with_Spring_Boot.service;
 
 import com.baeldung.Raft_Implementation_with_Spring_Boot.config.NodeConfig;
 import com.baeldung.Raft_Implementation_with_Spring_Boot.dto.NodeStatusDTO;
-import com.baeldung.Raft_Implementation_with_Spring_Boot.model.NodeState;
+import com.baeldung.Raft_Implementation_with_Spring_Boot.persistence.model.NodeState;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -17,8 +17,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import com.baeldung.Raft_Implementation_with_Spring_Boot.model.NodeStateEntity;
-import com.baeldung.Raft_Implementation_with_Spring_Boot.repository.NodeStateRepository;
+import com.baeldung.Raft_Implementation_with_Spring_Boot.persistence.model.NodeStateEntity;
+import com.baeldung.Raft_Implementation_with_Spring_Boot.persistence.repository.NodeStateRepository;
 import com.baeldung.Raft_Implementation_with_Spring_Boot.exception.NodeStateNotFoundException;
 
 import jakarta.annotation.PostConstruct;

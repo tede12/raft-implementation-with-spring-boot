@@ -1,7 +1,8 @@
 package com.baeldung.Raft_Implementation_with_Spring_Boot.repository;
 
-import com.baeldung.Raft_Implementation_with_Spring_Boot.model.NodeState;
-import com.baeldung.Raft_Implementation_with_Spring_Boot.model.NodeStateEntity;
+import com.baeldung.Raft_Implementation_with_Spring_Boot.persistence.model.NodeState;
+import com.baeldung.Raft_Implementation_with_Spring_Boot.persistence.model.NodeStateEntity;
+import com.baeldung.Raft_Implementation_with_Spring_Boot.persistence.repository.NodeStateRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.data.r2dbc.DataR2dbcTest;

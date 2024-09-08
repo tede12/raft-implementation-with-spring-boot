@@ -1,6 +1,6 @@
 package com.baeldung.Raft_Implementation_with_Spring_Boot.dto;
 
-import com.baeldung.Raft_Implementation_with_Spring_Boot.model.NodeState;
+import com.baeldung.Raft_Implementation_with_Spring_Boot.persistence.model.NodeState;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 

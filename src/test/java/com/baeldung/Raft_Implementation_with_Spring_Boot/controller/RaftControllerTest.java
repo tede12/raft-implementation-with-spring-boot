@@ -1,8 +1,8 @@
 package com.baeldung.Raft_Implementation_with_Spring_Boot.controller;
 
 import com.baeldung.Raft_Implementation_with_Spring_Boot.dto.NodeStatusDTO;
-import com.baeldung.Raft_Implementation_with_Spring_Boot.model.NodeState;
-import com.baeldung.Raft_Implementation_with_Spring_Boot.model.NodeStateEntity;
+import com.baeldung.Raft_Implementation_with_Spring_Boot.persistence.model.NodeState;
+import com.baeldung.Raft_Implementation_with_Spring_Boot.persistence.model.NodeStateEntity;
 import com.baeldung.Raft_Implementation_with_Spring_Boot.service.RaftService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;

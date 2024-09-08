@@ -1,8 +1,8 @@
 package com.baeldung.Raft_Implementation_with_Spring_Boot.service;
 
-import com.baeldung.Raft_Implementation_with_Spring_Boot.model.NodeState;
-import com.baeldung.Raft_Implementation_with_Spring_Boot.model.NodeStateEntity;
-import com.baeldung.Raft_Implementation_with_Spring_Boot.repository.NodeStateRepository;
+import com.baeldung.Raft_Implementation_with_Spring_Boot.persistence.model.NodeState;
+import com.baeldung.Raft_Implementation_with_Spring_Boot.persistence.model.NodeStateEntity;
+import com.baeldung.Raft_Implementation_with_Spring_Boot.persistence.repository.NodeStateRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.*;
