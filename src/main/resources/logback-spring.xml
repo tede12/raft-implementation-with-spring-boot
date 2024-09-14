@@ -8,7 +8,7 @@
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
             <!-- Using Spring property placeholders for nodeId and nodePort -->
-            <pattern>%d{yyyy-MM-dd HH:mm:ss} %-5level [${nodeId}] [:${nodePort}] - %msg%n</pattern>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss} %-5level [${nodeId:-UNKNOWN}] [:${nodePort:-0}] - %msg%n</pattern>
         </encoder>
     </appender>
 
@@ -21,13 +21,14 @@
         </rollingPolicy>
         <encoder>
             <!-- Using Spring property placeholders for nodeId and nodePort -->
-            <pattern>%d{yyyy-MM-dd HH:mm:ss} %-5level [${nodeId}] [:${nodePort}] [%thread] %logger{36} - %msg%n
+            <pattern>%d{yyyy-MM-dd HH:mm:ss} %-5level [${nodeId:-UNKNOWN}] [:${nodePort:-0}] [%thread] %logger{36} -
+                %msg%n
             </pattern>
         </encoder>
     </appender>
 
-    <!-- Console Logger -->
-    <logger name="com.baeldung.Raft_Implementation_with_Spring_Boot" level="DEBUG" additivity="false">
+    <!-- Logger for com.baeldung.Raft_Implementation_with_Spring_Boot package -->
+    <logger name="com.baeldung.raft" level="DEBUG" additivity="false">
         <appender-ref ref="CONSOLE"/>
         <appender-ref ref="FILE"/>
     </logger>
