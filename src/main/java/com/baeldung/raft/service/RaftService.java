@@ -41,6 +41,8 @@ public class RaftService {
     @Getter
     private final String ownNodeUrl;
     private volatile long lastHeartbeat = System.currentTimeMillis();
+    private volatile long electionDeadline = System.currentTimeMillis() + randomizedTimeout();
+
 
     /**
      * Constructs a new {@code RaftService} with the specified dependencies.
@@ -244,7 +246,8 @@ public class RaftService {
      */
     public Mono<Void> receiveHeartbeat() {
         lastHeartbeat = System.currentTimeMillis();
-        log.debug("Received heartbeat from leader");
+        electionDeadline = lastHeartbeat + randomizedTimeout();
+        // log.debug("Received heartbeat from leader");
         return isLeader().flatMap(isLeader -> {
             if (isLeader) {
                 log.warn("Leader {} received heartbeat from another leader. Stepping down.", nodeId);
@@ -260,19 +263,20 @@ public class RaftService {
      */
     @PostConstruct
     public void monitorHeartbeats() {
-        Flux.interval(Duration.ofSeconds(1)).flatMap(tick -> isLeader().flatMap(isLeader -> {
-            if (isLeader) {
-                // Leader sends heartbeats periodically
-                return sendHeartbeats();
-            } else {
-                // Follower monitors heartbeats
-                long now = System.currentTimeMillis();
-                if (now - lastHeartbeat > randomizedTimeout() && !electionInProgress.get()) {
-                    return startElection();
-                }
-            }
-            return Mono.empty();
-        })).subscribe();
+        Flux.interval(Duration.ofMillis(500))
+                .flatMap(tick -> isLeader().flatMap(isLeader -> {
+                    if (isLeader) {
+                        // Leader sends heartbeats periodically
+                        return sendHeartbeats();
+                    } else {
+                        // Follower monitors heartbeats
+                        long now = System.currentTimeMillis();
+                        if (now > electionDeadline && !electionInProgress.get()) {
+                            return startElection().doOnSuccess(v -> electionDeadline = System.currentTimeMillis() + randomizedTimeout());
+                        }
+                    }
+                    return Mono.empty();
+                })).subscribe();
     }
 
     /**
@@ -319,11 +323,7 @@ public class RaftService {
      * @return a {@link Mono} emitting {@code true} if the node is the leader, {@code false} otherwise
      */
     private Mono<Boolean> isLeader() {
-        return nodeStateRepository.findByNodeId(nodeId).map(node -> {
-            boolean leader = NodeState.LEADER.equals(node.getState());
-            log.debug("isLeader() for {}: {}", nodeId, leader);
-            return leader;
-        }).defaultIfEmpty(false);
+        return nodeStateRepository.findByNodeId(nodeId).map(node -> NodeState.LEADER.equals(node.getState())).defaultIfEmpty(false);
     }
 
     /**
@@ -346,7 +346,7 @@ public class RaftService {
             } else {
                 // Request status from other nodes
                 return webClient.get().uri("http://" + nodeUrl + "/raft/status").retrieve().bodyToMono(NodeStatusDTO.class).map(dto -> {
-                    dto.setNodeUrl(nodeUrl); // Set nodeUrl in DTO
+                    dto.setNodeUrl(nodeUrl);
                     return dto;
                 }).onErrorResume(e -> {
                     if (isNodeUp(e, nodeUrl)) {
