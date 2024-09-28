@@ -153,6 +153,11 @@ public class RaftService {
      * @return a {@link Mono} signaling completion
      */
     public Mono<Void> startElection() {
+        if (!electionInProgress.compareAndSet(false, true)) {
+            // Election already in progress
+            return Mono.empty();
+        }
+
         log.info("Node {} has started an election", nodeId);
         return nodeStateRepository.findByNodeId(nodeId).flatMap(node -> {
             node.setState(NodeState.CANDIDATE);
@@ -161,7 +166,7 @@ public class RaftService {
             log.debug("Node {} increments term to {}", nodeId, node.getCurrentTerm());
             return transactionalRaftService.saveNodeState(node)
                     .flatMap(this::sendRequestVoteToOtherNodes);
-        });
+        }).doOnTerminate(() -> electionInProgress.set(false));
     }
 
     /**
@@ -197,13 +202,39 @@ public class RaftService {
             long positiveVotes = votes.stream().filter(v -> v).count() + 1;
             log.info("Node {} has received {} positive votes", nodeId, positiveVotes);
             if (positiveVotes > clusterNodes.size() / 2) {
-                return transactionalRaftService.becomeLeader(node);
+                return transactionalRaftService.becomeLeader(node)
+                        .doOnSuccess(leader -> log.info("Node {} became the leader for term {}", nodeId, node.getCurrentTerm()));
             }
-            // Reset electionInProgress flag if not becoming leader
+            // If not enough votes, do not become leader
             log.debug("Node {} did not receive enough votes to become leader", nodeId);
-            electionInProgress.set(false);
             return Mono.empty();
         }).then();
+    }
+
+
+    /**
+     * Sends periodic heartbeat messages to all followers.
+     *
+     * @return a {@link Mono} signaling completion
+     */
+    private Mono<Void> sendHeartbeats() {
+        return Flux.fromIterable(clusterNodes)
+                .flatMap(nodeUrl -> {
+                    if (nodeUrl.equals(ownNodeUrl)) {
+                        return Mono.empty(); // Skip sending to self
+                    }
+                    return webClient.post()
+                            .uri("http://" + nodeUrl + "/raft/heartbeat")
+                            .retrieve()
+                            .bodyToMono(Void.class)
+                            .doOnError(e -> {
+                                if (isNodeUp(e, nodeUrl)) {
+                                    log.error("Failed to send heartbeat to {}: {}", nodeUrl, e.getMessage());
+                                }
+                            })
+                            .onErrorResume(e -> Mono.empty()); // Continue even if a node is down
+                })
+                .then();
     }
 
     /**
@@ -230,9 +261,13 @@ public class RaftService {
     @PostConstruct
     public void monitorHeartbeats() {
         Flux.interval(Duration.ofSeconds(1)).flatMap(tick -> isLeader().flatMap(isLeader -> {
-            if (!isLeader) {
+            if (isLeader) {
+                // Leader sends heartbeats periodically
+                return sendHeartbeats();
+            } else {
+                // Follower monitors heartbeats
                 long now = System.currentTimeMillis();
-                if (now - lastHeartbeat > randomizedTimeout() && !electionInProgress.get()) { // Randomized timeout
+                if (now - lastHeartbeat > randomizedTimeout() && !electionInProgress.get()) {
                     return startElection();
                 }
             }
