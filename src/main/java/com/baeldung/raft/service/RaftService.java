@@ -100,9 +100,14 @@ public class RaftService {
                     node.setNodeId(nodeId);
                     node.setState(NodeState.FOLLOWER);
                     node.setCurrentTerm(0);
+                    node.setIsStopped(false);
                     return transactionalRaftService.saveNodeState(node);
                 }))
                 .flatMap(node -> {
+                    if (node.isStopped()) {
+                        log.info("Node {} is marked as stopped. Skipping initialization.", nodeId);
+                        return Mono.empty();
+                    }
                     if (!NodeState.LEADER.equals(node.getState())) {
                         return checkClusterReadiness().then();
                     }
@@ -126,7 +131,7 @@ public class RaftService {
                         log.error("Error during status request to {}: {}", nodeUrl, e.getMessage());
                     }
                     // If the node is DOWN, create a DTO with DOWN status
-                    return Mono.just(new NodeStatusDTO(nodeUrl, NodeState.DOWN, 0, "None", nodeUrl));
+                    return Mono.just(new NodeStatusDTO(nodeUrl, NodeState.DOWN, 0, "None", nodeUrl, true));
                 })).collectList().flatMap(responses -> {
                     // Check if there is already a leader
                     boolean leaderExists = responses.stream().anyMatch(status -> NodeState.LEADER.equals(status.getState()));
@@ -326,6 +331,40 @@ public class RaftService {
         return nodeStateRepository.findByNodeId(nodeId).map(node -> NodeState.LEADER.equals(node.getState())).defaultIfEmpty(false);
     }
 
+    public Mono<Void> stopNode() {
+        return nodeStateRepository.findByNodeId(nodeId)
+                .switchIfEmpty(Mono.defer(() -> {
+                    NodeStateEntity node = new NodeStateEntity();
+                    node.setNodeId(nodeId);
+                    node.setState(NodeState.DOWN);
+                    node.setCurrentTerm(0);
+                    node.setIsStopped(true);
+                    return transactionalRaftService.saveNodeState(node);
+                }))
+                .flatMap(node -> {
+                    node.setState(NodeState.DOWN);
+                    node.setIsStopped(true);
+                    log.info("Node {} has been stopped and set to DOWN state.", nodeId);
+                    return transactionalRaftService.saveNodeState(node).then();
+                });
+    }
+
+    /**
+     * Resumes the node by unmarking it as stopped and setting its state appropriately.
+     */
+    public Mono<Void> resumeNode() {
+        return nodeStateRepository.findByNodeId(nodeId)
+                .switchIfEmpty(Mono.error(new IllegalStateException("Node not initialized.")))
+                .flatMap(node -> {
+                    node.setIsStopped(false);
+                    if (node.getState() == NodeState.DOWN) {
+                        node.setState(NodeState.FOLLOWER);
+                    }
+                    log.info("Node {} has been resumed and is now active.", nodeId);
+                    return transactionalRaftService.saveNodeState(node).then();
+                });
+    }
+
     /**
      * Retrieves the status of all nodes in the cluster.
      *
@@ -335,13 +374,20 @@ public class RaftService {
         return Flux.fromIterable(clusterNodes).flatMap(nodeUrl -> {
             if (nodeUrl.equals(ownNodeUrl)) {
                 // Get status from local database
-                return nodeStateRepository.findByNodeId(nodeId).map(node -> new NodeStatusDTO(node.getNodeId(), node.getState(), node.getCurrentTerm(), node.getVotedFor(), nodeUrl))
+                return nodeStateRepository.findByNodeId(nodeId).map(node -> new NodeStatusDTO(
+                                node.getNodeId(),
+                                node.getState(),
+                                node.getCurrentTerm(),
+                                node.getVotedFor(),
+                                nodeUrl,
+                                node.isStopped()
+                        ))
                         .onErrorResume(e -> {
                             if (isNodeUp(e, nodeUrl)) {
                                 log.error("Error retrieving local state: {}", e.getMessage());
                             }
                             // If it fails, consider the node as DOWN
-                            return Mono.just(new NodeStatusDTO(nodeId, NodeState.DOWN, 0, "None", nodeUrl));
+                            return Mono.just(new NodeStatusDTO(nodeId, NodeState.DOWN, 0, "None", nodeUrl, true));
                         });
             } else {
                 // Request status from other nodes
@@ -353,7 +399,7 @@ public class RaftService {
                         log.error("Error fetching status from {}: {}", nodeUrl, e.getMessage());
                     }
                     // Assign nodeUrl as identifier if nodeId cannot be obtained
-                    return Mono.just(new NodeStatusDTO(nodeUrl, NodeState.DOWN, 0, "None", nodeUrl));
+                    return Mono.just(new NodeStatusDTO(nodeUrl, NodeState.DOWN, 0, "None", nodeUrl, true));
                 });
             }
         }).collectList();
@@ -367,6 +413,14 @@ public class RaftService {
      */
     public Mono<NodeStateEntity> getNodeStatusEntity() {
         log.debug("Status request received for node {}", nodeId);
-        return nodeStateRepository.findByNodeId(nodeId).switchIfEmpty(Mono.error(new NodeStateNotFoundException("Node state not found")));
+        return nodeStateRepository.findByNodeId(nodeId)
+                .switchIfEmpty(Mono.error(new NodeStateNotFoundException("Node state not found")))
+                .flatMap(node -> {
+                    if (node.isStopped()) {
+                        node.setState(NodeState.DOWN);
+                    }
+                    return Mono.just(node);
+                });
     }
+
 }

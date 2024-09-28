@@ -39,6 +39,10 @@ public class NodeStateEntity {
     @Schema(description = "Node ID that this node has voted for", example = "node2")
     private String votedFor;
 
+    @Column("is_stopped")
+    @Schema(description = "Flag indicating if the node is stopped", example = "false")
+    private boolean isStopped;
+
     @Override
     public String toString() {
         return "NodeStateEntity{" +
@@ -47,6 +51,12 @@ public class NodeStateEntity {
                 ", state=" + state +
                 ", currentTerm=" + currentTerm +
                 ", votedFor='" + votedFor + '\'' +
+                ", isStopped=" + isStopped +
                 '}';
+    }
+
+    // Lombok seems not working for this setter...
+    public void setIsStopped(boolean isStopped) {
+        this.isStopped = isStopped;
     }
 }

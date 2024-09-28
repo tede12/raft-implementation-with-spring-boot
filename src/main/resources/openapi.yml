@@ -137,11 +137,15 @@ components:
           type: string
           format: uri
           example: "http://localhost:8000"
+        isStopped:
+          type: boolean
+          example: false
       required:
         - nodeId
         - state
         - currentTerm
         - nodeUrl
+        - isStopped
     RaftRequestVotePostRequest:
       type: object
       properties:

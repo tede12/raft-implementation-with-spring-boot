@@ -26,6 +26,9 @@ public class NodeStatusDTO {
     @Schema(description = "URL of the node", example = "localhost:8000")
     private String nodeUrl;
 
+    @Schema(description = "Flag indicating if the node is stopped", example = "false")
+    private boolean isStopped;
+
     /**
      * Constructs a new {@code NodeStatusDTO} with the specified details.
      *
@@ -34,12 +37,14 @@ public class NodeStatusDTO {
      * @param currentTerm the current term number
      * @param votedFor    the ID of the node voted for in the current term
      * @param nodeUrl     the URL of the node
+     * @param isStopped   the stopped status of the node
      */
-    public NodeStatusDTO(String nodeId, NodeState state, int currentTerm, String votedFor, String nodeUrl) {
+    public NodeStatusDTO(String nodeId, NodeState state, int currentTerm, String votedFor, String nodeUrl, boolean isStopped) {
         this.nodeId = nodeId;
         this.state = state;
         this.currentTerm = currentTerm;
         this.votedFor = votedFor;
         this.nodeUrl = nodeUrl;
+        this.isStopped = isStopped;
     }
 }

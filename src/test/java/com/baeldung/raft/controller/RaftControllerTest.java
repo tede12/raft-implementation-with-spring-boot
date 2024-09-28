@@ -83,7 +83,7 @@ class RaftControllerTest {
         when(raftService.getNodeStatusEntity()).thenReturn(Mono.just(nodeEntity));
 
         // Define the expected NodeStatusDTO
-        NodeStatusDTO expectedStatusDTO = new NodeStatusDTO("node1", NodeState.FOLLOWER, 1, "None", null);
+        NodeStatusDTO expectedStatusDTO = new NodeStatusDTO("node1", NodeState.FOLLOWER, 1, "None", null, false);
 
         webTestClient.get()
                 .uri("/raft/status")
@@ -100,9 +100,9 @@ class RaftControllerTest {
     void testStreamStatus_Success() {
         // Define the status list to be returned by the mocked service
         List<NodeStatusDTO> statusList = List.of(
-                new NodeStatusDTO("node1", NodeState.LEADER, 2, "None", "localhost:8000"),
-                new NodeStatusDTO("node2", NodeState.FOLLOWER, 2, "node1", "localhost:8001"),
-                new NodeStatusDTO("node3", NodeState.FOLLOWER, 2, "node1", "localhost:8002")
+                new NodeStatusDTO("node1", NodeState.LEADER, 2, "None", "localhost:8000", false),
+                new NodeStatusDTO("node2", NodeState.FOLLOWER, 2, "node1", "localhost:8001", false),
+                new NodeStatusDTO("node3", NodeState.FOLLOWER, 2, "node1", "localhost:8002", false)
         );
 
         // Mock the raftService to return the status list

@@ -1,5 +1,6 @@
 package com.baeldung.raft.web.controller;
 
+import com.baeldung.raft.persistence.model.NodeState;
 import com.baeldung.raft.web.dto.NodeStatusDTO;
 import com.baeldung.raft.service.RaftService;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -117,6 +118,29 @@ public class RaftController {
         return raftService.receiveHeartbeat();
     }
 
+    @Operation(summary = "Stop the node")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Node stopped successfully"),
+            @ApiResponse(responseCode = "500", description = "Internal server error", content = @Content)
+    })
+    @GetMapping("/stop")
+    public Mono<String> stopNode() {
+        return raftService.stopNode()
+                .thenReturn("Node has been stopped and is now in DOWN state.");
+    }
+
+    @Operation(summary = "Resume the node")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Node resumed successfully"),
+            @ApiResponse(responseCode = "500", description = "Internal server error", content = @Content)
+    })
+
+    @GetMapping("/resume")
+    public Mono<String> resumeNode() {
+        return raftService.resumeNode()
+                .thenReturn("Node has been resumed and is now active.");
+    }
+
     /**
      * Retrieves the current status of the node.
      *
@@ -135,14 +159,19 @@ public class RaftController {
     @GetMapping("/status")
     public Mono<NodeStatusDTO> getStatus() {
         return raftService.getNodeStatusEntity()
-                .map(node -> new NodeStatusDTO(
-                        node.getNodeId(),
-                        node.getState(),
-                        node.getCurrentTerm(),
-                        node.getVotedFor(),
-                        raftService.getOwnNodeUrl()
-                ));
+                .map(node -> {
+                    NodeState state = node.isStopped() ? NodeState.DOWN : node.getState();
+                    return new NodeStatusDTO(
+                            node.getNodeId(),
+                            state,
+                            node.getCurrentTerm(),
+                            node.getVotedFor(),
+                            raftService.getOwnNodeUrl(),
+                            node.isStopped()
+                    );
+                });
     }
+
 
     /**
      * Streams the status of all nodes in the Raft cluster using Server-Sent Events.

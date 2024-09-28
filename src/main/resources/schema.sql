@@ -18,23 +18,6 @@ CREATE TABLE IF NOT EXISTS node_state
     voted_for VARCHAR
 (
     255
-)
-    );
-
-CREATE TABLE IF NOT EXISTS log_entry
-(
-    id
-    BIGINT
-    AUTO_INCREMENT
-    PRIMARY
-    KEY,
-    term
-    INT
-    NOT
-    NULL,
-    command
-    VARCHAR
-(
-    255
-)
+),
+    is_stopped BOOLEAN NOT NULL DEFAULT FALSE
     );
