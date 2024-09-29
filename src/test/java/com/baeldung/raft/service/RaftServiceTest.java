@@ -1,6 +1,7 @@
 package com.baeldung.raft.service;
 
 import com.baeldung.raft.config.NodeConfig;
+import com.baeldung.raft.config.TimeoutConfig;
 import com.baeldung.raft.persistence.model.NodeState;
 import com.baeldung.raft.persistence.model.NodeStateEntity;
 import com.baeldung.raft.persistence.repository.NodeStateRepository;
@@ -42,11 +43,23 @@ class RaftServiceTest {
         when(nodeConfig.getId()).thenReturn(nodeId);
         when(nodeConfig.getClusterNodes()).thenReturn(clusterNodes);
 
+        // Instantiate RaftTimeoutProperties using builder
+        TimeoutConfig.ElectionTimeout electionTimeout = TimeoutConfig.ElectionTimeout.builder()
+                .min(150)
+                .max(300)
+                .build();
+
+        TimeoutConfig timeoutConfig = TimeoutConfig.builder()
+                .electionTimeout(electionTimeout)
+                .heartbeatInterval(50)
+                .build();
+
         // Instantiate RaftService with mocked dependencies and predefined values
         RaftService realRaftService = new RaftService(
                 nodeStateRepository,
                 transactionalRaftService,
                 nodeConfig,
+                timeoutConfig,
                 serverPort
         );
 

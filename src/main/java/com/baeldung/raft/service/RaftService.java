@@ -1,6 +1,7 @@
 package com.baeldung.raft.service;
 
 import com.baeldung.raft.config.NodeConfig;
+import com.baeldung.raft.config.TimeoutConfig;
 import com.baeldung.raft.web.dto.NodeStatusDTO;
 import com.baeldung.raft.persistence.model.NodeState;
 import lombok.Getter;
@@ -32,15 +33,18 @@ public class RaftService {
     private final NodeStateRepository nodeStateRepository;
     private final TransactionalRaftService transactionalRaftService;
     private final WebClient webClient;
-
+    @Getter
+    private final TimeoutConfig timeoutProperties;
     @Getter
     private final String nodeId;
     @Getter
     private final List<String> clusterNodes;
-    private final AtomicBoolean electionInProgress = new AtomicBoolean(false);
     @Getter
     private final String ownNodeUrl;
+
     private volatile long lastHeartbeat = System.currentTimeMillis();
+    private final AtomicBoolean electionInProgress = new AtomicBoolean(false);
+    private volatile long electionDeadline;
 
     /**
      * Constructs a new {@code RaftService} with the specified dependencies.
@@ -54,13 +58,16 @@ public class RaftService {
     public RaftService(NodeStateRepository nodeStateRepository,
                        TransactionalRaftService transactionalRaftService,
                        NodeConfig nodeConfig,
+                       TimeoutConfig timeoutProperties,
                        @org.springframework.beans.factory.annotation.Value("${server.port}") int serverPort) {
         this.nodeStateRepository = nodeStateRepository;
         this.transactionalRaftService = transactionalRaftService;
+        this.timeoutProperties = timeoutProperties;
         this.nodeId = nodeConfig.getId();
         this.clusterNodes = nodeConfig.getClusterNodes();
         this.ownNodeUrl = "localhost:" + serverPort;
         this.webClient = WebClient.create();
+        this.electionDeadline = System.currentTimeMillis() + randomizedTimeout();
 
         // Add validation
         if (this.clusterNodes == null || this.clusterNodes.isEmpty()) {
@@ -142,7 +149,8 @@ public class RaftService {
                             return Mono.just(true);
                         });
                     }
-                    if (electionInProgress.compareAndSet(false, true)) {
+                    // If no leader exists and no election is in progress, start an election
+                    if (!electionInProgress.get()) {
                         return startElection().thenReturn(true);
                     }
                     return Mono.just(false);
@@ -158,8 +166,10 @@ public class RaftService {
      * @return a {@link Mono} signaling completion
      */
     public Mono<Void> startElection() {
+        log.info("Node {} is starting an election. {}", nodeId, electionInProgress.get());
         if (!electionInProgress.compareAndSet(false, true)) {
             // Election already in progress
+            log.debug("Election already in progress. Skipping. {}", electionInProgress.get());
             return Mono.empty();
         }
 
@@ -276,15 +286,12 @@ public class RaftService {
         });
     }
 
-
-    private volatile long electionDeadline = System.currentTimeMillis() + randomizedTimeout();
-
     /**
      * Monitors heartbeats to detect leader failures and initiate elections.
      */
     @PostConstruct
     public void monitorHeartbeats() {
-        Flux.interval(Duration.ofMillis(500))
+        Flux.interval(Duration.ofMillis(timeoutProperties.getHeartbeatInterval()))
                 .flatMap(tick -> nodeStateRepository.findByNodeId(nodeId)
                         .flatMap(node -> {
                             if (node.isStopped()) {
@@ -314,7 +321,9 @@ public class RaftService {
      * @return a randomized timeout in milliseconds
      */
     private long randomizedTimeout() {
-        return 1500 + (long) (Math.random() * 1500);
+        long min = timeoutProperties.getElectionTimeout().getMin();
+        long max = timeoutProperties.getElectionTimeout().getMax();
+        return min + (long) (Math.random() * (max - min));
     }
 
     /**

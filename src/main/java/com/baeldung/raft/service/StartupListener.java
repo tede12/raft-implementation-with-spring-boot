@@ -37,6 +37,8 @@ public class StartupListener implements ApplicationListener<ApplicationReadyEven
         log.info("\tNode ID: {}", raftService.getNodeId());
         log.info("\tNode URL: {}", raftService.getOwnNodeUrl());
         log.info("\tCluster Nodes: {}", String.join(", ", raftService.getClusterNodes()));
+        log.info("\tElection Timeout: {}-{} ms", raftService.getTimeoutProperties().getElectionTimeout().getMin(), raftService.getTimeoutProperties().getElectionTimeout().getMax());
+        log.info("\tHeartbeat Timeout: {} ms", raftService.getTimeoutProperties().getHeartbeatInterval());
         log.debug("\tDEBUGGING MONITOR: http://{}/monitor", raftService.getOwnNodeUrl());
         log.info("****************************************************************************************\n\n");
 
