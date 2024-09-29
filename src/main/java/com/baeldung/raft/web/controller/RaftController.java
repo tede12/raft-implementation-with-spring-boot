@@ -118,6 +118,12 @@ public class RaftController {
         return raftService.receiveHeartbeat();
     }
 
+
+    /**
+     * Stops the node, transitioning it to the DOWN state.
+     *
+     * @return a {@link Mono} emitting a message indicating the node has been stopped
+     */
     @Operation(summary = "Stop the node")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Node stopped successfully"),
@@ -129,12 +135,16 @@ public class RaftController {
                 .thenReturn("Node has been stopped and is now in DOWN state.");
     }
 
+    /**
+     * Resumes the node, transitioning it to the ACTIVE state.
+     *
+     * @return a {@link Mono} emitting a message indicating the node has been resumed
+     */
     @Operation(summary = "Resume the node")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Node resumed successfully"),
             @ApiResponse(responseCode = "500", description = "Internal server error", content = @Content)
     })
-
     @GetMapping("/resume")
     public Mono<String> resumeNode() {
         return raftService.resumeNode()
@@ -172,7 +182,6 @@ public class RaftController {
                 });
     }
 
-
     /**
      * Streams the status of all nodes in the Raft cluster using Server-Sent Events.
      *
@@ -187,7 +196,7 @@ public class RaftController {
     })
     @GetMapping(value = "/status-stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<String> streamStatus() {
-        return Flux.interval(Duration.ofSeconds(2)).flatMap(tick -> raftService.getAllNodeStatuses()).map(nodeStates -> {
+        return Flux.interval(Duration.ofMillis(500)).flatMap(tick -> raftService.getAllNodeStatuses()).map(nodeStates -> {
             // Convert the list of NodeStatusDTO objects to a JSON string
             try {
                 return objectMapper.writeValueAsString(nodeStates);
