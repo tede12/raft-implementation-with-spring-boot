@@ -163,15 +163,22 @@ public class RaftService {
             return Mono.empty();
         }
 
-        log.info("Node {} has started an election", nodeId);
-        return nodeStateRepository.findByNodeId(nodeId).flatMap(node -> {
-            node.setState(NodeState.CANDIDATE);
-            node.setCurrentTerm(node.getCurrentTerm() + 1);
-            node.setVotedFor(nodeId);
-            log.debug("Node {} increments term to {}", nodeId, node.getCurrentTerm());
-            return transactionalRaftService.saveNodeState(node)
-                    .flatMap(this::sendRequestVoteToOtherNodes);
-        }).doOnTerminate(() -> electionInProgress.set(false));
+        return nodeStateRepository.findByNodeId(nodeId)
+                .flatMap(node -> {
+                    if (node.isStopped()) {
+                        log.info("Node {} is stopped. Cannot start an election.", nodeId);
+                        electionInProgress.set(false);
+                        return Mono.empty();
+                    }
+                    log.info("Node {} has started an election", nodeId);
+                    log.info("Node {} has started an election", nodeId);
+                    node.setState(NodeState.CANDIDATE);
+                    node.setCurrentTerm(node.getCurrentTerm() + 1);
+                    node.setVotedFor(nodeId);
+                    log.debug("Node {} increments term to {}", nodeId, node.getCurrentTerm());
+                    return transactionalRaftService.saveNodeState(node)
+                            .flatMap(this::sendRequestVoteToOtherNodes);
+                }).doOnTerminate(() -> electionInProgress.set(false));
     }
 
     /**
@@ -223,23 +230,31 @@ public class RaftService {
      * @return a {@link Mono} signaling completion
      */
     private Mono<Void> sendHeartbeats() {
-        return Flux.fromIterable(clusterNodes)
-                .flatMap(nodeUrl -> {
-                    if (nodeUrl.equals(ownNodeUrl)) {
-                        return Mono.empty(); // Skip sending to self
+        return nodeStateRepository.findByNodeId(nodeId)
+                .flatMap(node -> {
+                    if (node.isStopped()) {
+                        log.info("Node {} is stopped. Skipping heartbeat transmission.", nodeId);
+                        return Mono.empty();
                     }
-                    return webClient.post()
-                            .uri("http://" + nodeUrl + "/raft/heartbeat")
-                            .retrieve()
-                            .bodyToMono(Void.class)
-                            .doOnError(e -> {
-                                if (isNodeUp(e, nodeUrl)) {
-                                    log.error("Failed to send heartbeat to {}: {}", nodeUrl, e.getMessage());
+                    return Flux.fromIterable(clusterNodes)
+                            .flatMap(nodeUrl -> {
+                                if (nodeUrl.equals(ownNodeUrl)) {
+                                    return Mono.empty(); // Skip sending to self
                                 }
+                                // log.debug("Sending heartbeat to {}", nodeUrl);
+                                return webClient.post()
+                                        .uri("http://" + nodeUrl + "/raft/heartbeat")
+                                        .retrieve()
+                                        .bodyToMono(Void.class)
+                                        .doOnError(e -> {
+                                            if (isNodeUp(e, nodeUrl)) {
+                                                log.error("Failed to send heartbeat to {}: {}", nodeUrl, e.getMessage());
+                                            }
+                                        })
+                                        .onErrorResume(e -> Mono.empty()); // Continue even if a node is down
                             })
-                            .onErrorResume(e -> Mono.empty()); // Continue even if a node is down
-                })
-                .then();
+                            .then();
+                });
     }
 
     /**
@@ -270,19 +285,27 @@ public class RaftService {
     @PostConstruct
     public void monitorHeartbeats() {
         Flux.interval(Duration.ofMillis(500))
-                .flatMap(tick -> isLeader().flatMap(isLeader -> {
-                    if (isLeader) {
-                        // Leader sends heartbeats periodically
-                        return sendHeartbeats();
-                    } else {
-                        // Follower monitors heartbeats
-                        long now = System.currentTimeMillis();
-                        if (now > electionDeadline && !electionInProgress.get()) {
-                            return startElection().doOnSuccess(v -> electionDeadline = System.currentTimeMillis() + randomizedTimeout());
-                        }
-                    }
-                    return Mono.empty();
-                })).subscribe();
+                .flatMap(tick -> nodeStateRepository.findByNodeId(nodeId)
+                        .flatMap(node -> {
+                            if (node.isStopped()) {
+                                log.info("Node {} is stopped. Ceasing heartbeat monitoring.", nodeId);
+                                return Mono.empty();
+                            }
+                            return isLeader().flatMap(isLeader -> {
+                                if (isLeader) {
+                                    // Leader sends heartbeats periodically
+                                    return sendHeartbeats();
+                                } else {
+                                    // Follower monitors heartbeats
+                                    long now = System.currentTimeMillis();
+                                    if (now > electionDeadline && !electionInProgress.get()) {
+                                        return startElection().doOnSuccess(v -> electionDeadline = System.currentTimeMillis() + randomizedTimeout());
+                                    }
+                                }
+                                return Mono.empty();
+                            });
+                        }))
+                .subscribe();
     }
 
     /**
@@ -329,10 +352,18 @@ public class RaftService {
      * @return a {@link Mono} emitting {@code true} if the node is the leader, {@code false} otherwise
      */
     private Mono<Boolean> isLeader() {
-        return nodeStateRepository.findByNodeId(nodeId).map(node -> NodeState.LEADER.equals(node.getState())).defaultIfEmpty(false);
+        return nodeStateRepository.findByNodeId(nodeId)
+                .map(node -> NodeState.LEADER.equals(node.getState()) && !node.isStopped())
+                .defaultIfEmpty(false);
     }
 
-
+    /**
+     * Stops the node by marking it as stopped and setting its state to DOWN.
+     * This method is idempotent and can be called multiple times.
+     * The node can be resumed later by calling {@link #resumeNode()}.
+     *
+     * @return a {@link Mono} signaling completion
+     */
     public Mono<Void> stopNode() {
         return nodeStateRepository.findByNodeId(nodeId)
                 .switchIfEmpty(Mono.defer(() -> {
@@ -353,6 +384,10 @@ public class RaftService {
 
     /**
      * Resumes the node by unmarking it as stopped and setting its state appropriately.
+     * This method can only be called after the node has been stopped.
+     * If the node was previously a leader, it will step down.
+     *
+     * @return a {@link Mono} signaling completion
      */
     public Mono<Void> resumeNode() {
         return nodeStateRepository.findByNodeId(nodeId)
@@ -414,7 +449,7 @@ public class RaftService {
      * @throws NodeStateNotFoundException if the node state is not found
      */
     public Mono<NodeStateEntity> getNodeStatusEntity() {
-        log.debug("Status request received for node {}", nodeId);
+        // log.debug("Status request received for node {}", nodeId);
         return nodeStateRepository.findByNodeId(nodeId)
                 .switchIfEmpty(Mono.error(new NodeStateNotFoundException("Node state not found")))
                 .flatMap(node -> {
@@ -424,5 +459,4 @@ public class RaftService {
                     return Mono.just(node);
                 });
     }
-
 }
