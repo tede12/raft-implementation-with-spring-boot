@@ -41,8 +41,6 @@ public class RaftService {
     @Getter
     private final String ownNodeUrl;
     private volatile long lastHeartbeat = System.currentTimeMillis();
-    private volatile long electionDeadline = System.currentTimeMillis() + randomizedTimeout();
-
 
     /**
      * Constructs a new {@code RaftService} with the specified dependencies.
@@ -263,6 +261,9 @@ public class RaftService {
         });
     }
 
+
+    private volatile long electionDeadline = System.currentTimeMillis() + randomizedTimeout();
+
     /**
      * Monitors heartbeats to detect leader failures and initiate elections.
      */
@@ -331,6 +332,7 @@ public class RaftService {
         return nodeStateRepository.findByNodeId(nodeId).map(node -> NodeState.LEADER.equals(node.getState())).defaultIfEmpty(false);
     }
 
+
     public Mono<Void> stopNode() {
         return nodeStateRepository.findByNodeId(nodeId)
                 .switchIfEmpty(Mono.defer(() -> {
@@ -392,7 +394,7 @@ public class RaftService {
             } else {
                 // Request status from other nodes
                 return webClient.get().uri("http://" + nodeUrl + "/raft/status").retrieve().bodyToMono(NodeStatusDTO.class).map(dto -> {
-                    dto.setNodeUrl(nodeUrl);
+                    dto.setNodeUrl(nodeUrl); // Set nodeUrl in DTO
                     return dto;
                 }).onErrorResume(e -> {
                     if (isNodeUp(e, nodeUrl)) {
