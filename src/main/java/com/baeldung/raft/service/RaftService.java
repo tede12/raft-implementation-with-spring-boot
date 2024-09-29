@@ -146,6 +146,8 @@ public class RaftService {
                             if (NodeState.LEADER.equals(node.getState())) {
                                 return transactionalRaftService.stepDown(node);
                             }
+                            // Become a follower if not already
+                            node.setState(NodeState.FOLLOWER);
                             return Mono.just(true);
                         });
                     }
@@ -223,7 +225,7 @@ public class RaftService {
             // Include the vote from the node itself
             long positiveVotes = votes.stream().filter(v -> v).count() + 1;
             log.info("Node {} has received {} positive votes", nodeId, positiveVotes);
-            if (positiveVotes > clusterNodes.size() / 2) {
+            if (positiveVotes > (clusterNodes.size() / 2)) {
                 return transactionalRaftService.becomeLeader(node)
                         .doOnSuccess(leader -> log.info("Node {} became the leader for term {}", nodeId, node.getCurrentTerm()));
             }
@@ -292,6 +294,7 @@ public class RaftService {
     @PostConstruct
     public void monitorHeartbeats() {
         Flux.interval(Duration.ofMillis(timeoutProperties.getHeartbeatInterval()))
+
                 .flatMap(tick -> nodeStateRepository.findByNodeId(nodeId)
                         .flatMap(node -> {
                             if (node.isStopped()) {
@@ -301,18 +304,30 @@ public class RaftService {
                             return isLeader().flatMap(isLeader -> {
                                 if (isLeader) {
                                     // Leader sends heartbeats periodically
+                                    log.debug("Node {} is leader. Sending heartbeats.", nodeId);
                                     return sendHeartbeats();
                                 } else {
                                     // Follower monitors heartbeats
                                     long now = System.currentTimeMillis();
-                                    if (now > electionDeadline && !electionInProgress.get()) {
-                                        return startElection().doOnSuccess(v -> electionDeadline = System.currentTimeMillis() + randomizedTimeout());
+                                    // log.debug("Node {} is follower. Current time: {}, Election deadline: {}", nodeId, now, electionDeadline);
+                                    if (now > electionDeadline) {
+                                        log.info("Election deadline exceeded. Initiating election.");
+                                        return startElection()
+                                                .doOnSuccess(v -> {
+                                                    electionDeadline = System.currentTimeMillis() + randomizedTimeout();
+                                                    log.debug("Election initiated. New election deadline set to {}", electionDeadline);
+                                                })
+                                                .doOnError(e -> log.error("Failed to start election: {}", e.getMessage()));
                                     }
                                 }
                                 return Mono.empty();
                             });
                         }))
-                .subscribe();
+                .subscribe(
+                        null,
+                        error -> log.error("Error in heartbeat monitoring: {}", error.getMessage()),
+                        () -> log.info("Heartbeat monitoring completed.")
+                );
     }
 
     /**
