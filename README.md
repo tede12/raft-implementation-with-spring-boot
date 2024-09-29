@@ -9,6 +9,7 @@ demonstrate how the Raft algorithm operates.**
 - [Features](#features)
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
+- [Node Configuration](#node-configuration)
 - [Running the Application](#running-the-application)
 - [Docker](#docker)
 - [Monitoring](#monitoring)
@@ -43,6 +44,14 @@ demonstrate how the Raft algorithm operates.**
    mvn clean install
    ```
 
+### Node Configuration
+
+Each node in the Raft cluster requires specific configuration properties:
+
+- `node.id`: A unique identifier for the node (e.g., `node1`).
+- `node.cluster-nodes`: A comma-separated list of all nodes in the cluster, including the current node's URL (e.g.,
+  `localhost:8000,localhost:8001,localhost:8002`).
+
 ## Running the Application
 
 To run a Raft cluster with multiple nodes, execute the application on different ports with unique node IDs. Open
@@ -58,8 +67,6 @@ mvn spring-boot:run -Dspring-boot.run.arguments="--server.port=8001 --node.id=no
 # Node 3
 mvn spring-boot:run -Dspring-boot.run.arguments="--server.port=8002 --node.id=node3 --node.cluster-nodes=localhost:8000,localhost:8001,localhost:8002"
 ```
-
-Ensure all nodes are running to form a complete Raft cluster.
 
 ## Docker
 
@@ -99,17 +106,29 @@ Use Docker Compose to start a Raft cluster with three nodes.
    docker logs -f node3
    ```
 
+### Node State Management
+
+Each node in the Raft cluster can be in one of the following states:
+
+- **Follower:** Passive state, waiting for instructions from the leader.
+- **Candidate:** State entered when a node attempts to become a leader.
+- **Leader:** The node responsible for managing the cluster and coordinating operations.
+- **Down:** The node is not active or has failed.
+
+The state of a node is persisted and can be retrieved using the `/raft/status` endpoint.
+
 ## Monitoring
 
 To monitor the status of all nodes in the Raft cluster:
 
 1. Navigate to the `/monitor` endpoint of any node. For example, if running on port `8000`:
-
    ```
    http://localhost:8000/monitor
    ```
 
 2. The monitoring page displays the status of all nodes, including their current state and term.
+3. Only for debug purposes, in the page `/monitor` you can `stop`/`resume` a node, this will simulate a node failure and
+   permit to see the behavior of the cluster.
 
 ## API Endpoints
 
@@ -151,6 +170,17 @@ To monitor the status of all nodes in the Raft cluster:
 
     - **Endpoint:** `GET /raft/status-stream`
     - **Description:** Streams the status of all nodes using Server-Sent Events (SSE).
+
+_(Only for debug purposes)_
+
+- **Stop Node**
+
+    - **Endpoint:** `GET /raft/stop`
+    - **Description:** Stop the node
+
+- **Resume Node**
+    - **Endpoint:** `GET /raft/resume`
+    - **Description:** Resume the node
 
 ## Testing
 
