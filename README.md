@@ -52,6 +52,15 @@ Each node in the Raft cluster requires specific configuration properties:
 - `node.cluster-nodes`: A comma-separated list of all nodes in the cluster, including the current node's URL (e.g.,
   `localhost:8000,localhost:8001,localhost:8002`).
 
+It's also possible to configure more properties for the Raft algorithm in the `application.properties` file:
+
+```properties
+# Raft Timeout Configurations (in milliseconds)
+raft.electionTimeout.min=1500
+raft.electionTimeout.max=3000
+raft.heartbeatInterval=500
+```
+
 ## Running the Application
 
 To run a Raft cluster with multiple nodes, execute the application on different ports with unique node IDs. Open
@@ -126,9 +135,17 @@ To monitor the status of all nodes in the Raft cluster:
    http://localhost:8000/monitor
    ```
 
+<p align="center">
+  <img alt="Raft Monitoring" src="slides/images/monitoring.png" width="80%">
+</p>
+
 2. The monitoring page displays the status of all nodes, including their current state and term.
 3. Only for debug purposes, in the page `/monitor` you can `stop`/`resume` a node, this will simulate a node failure and
    permit to see the behavior of the cluster.
+
+<p align="center">
+  <img alt="Raft Monitoring" src="slides/images/monitoring-stop.png" width="80%">
+</p>
 
 ## API Endpoints
 
